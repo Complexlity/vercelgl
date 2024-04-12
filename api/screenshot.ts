@@ -6,7 +6,7 @@ const puppeteer = require('puppeteer-core')
 //   if (!process.env.NODE_ENV) {
 //     return `http://localhost:3000/${hash}`
 //   }
-  
+
 //   return `https://image.w.kodadot.xyz/ipfs/${path}/${hash}`
 // }
 
@@ -27,12 +27,18 @@ const performCanvasCapture = async (page: any, canvasSelector: string) => {
     // get the base64 image from the CANVAS targetted
     const base64 = await page.$eval(canvasSelector, el => {
       if (!el || el.tagName !== "CANVAS") return null
-      return el.toDataURL()
+      return 'found'
+
     })
     if (!base64) throw new Error("No canvas found")
-    // remove the base64 mimetype at the beginning of the string
-    const pureBase64 = base64.replace(/^data:image\/png;base64,/, "")
-    return Buffer.from(pureBase64, "base64")
+    console.log("Screenshotting...")
+    const screenshot = await page.screenshot({ encoding: "base64", type: "jpeg" });
+    console.log("Done screenshotting")
+    const dataURL = `data:image/png;base64,${screenshot}`;
+    console.log({dataURL})
+
+    return dataURL
+    // return Buffer.from(pureBase64, "base64")
   } catch (err) {
     return null
   }
@@ -45,6 +51,7 @@ export default async (req: any, res: any) => {
     method
   } = req
 
+ console.log({body})
   if (method !== 'POST') {
     // CORS https://vercel.com/guides/how-to-enable-cors
     res.setHeader('Access-Control-Allow-Credentials', true)
@@ -58,6 +65,15 @@ export default async (req: any, res: any) => {
   }
 
   if (!body) return res.status(400).end(`No body provided`)
+
+  if (typeof body == 'string') {
+    try {
+      body = JSON.parse(body)
+      console.log("Parsed body", body)
+    } catch (error) {
+      return res.status(400).end("Invalid body")
+    }
+  }
 
   if (typeof body === 'object' && !body.url) return res.status(400).end(`No url provided`)
 
@@ -74,10 +90,11 @@ export default async (req: any, res: any) => {
       ignoreHTTPSErrors: true
     })
   } else {
+    console.log("Launching browser")
     browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    })
+      headless: "new",
+      executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    });
   }
 
   const page = await browser.newPage()
@@ -85,17 +102,21 @@ export default async (req: any, res: any) => {
   await page.setViewport({ width: 600, height: 600 })
 
   // const url = getAbsoluteURL(`?hash=${hash}`, path)
+
   const url = body.url
 
   console.log('url', url)
+
 
   await page.goto(url);
 
   const selector = 'canvas';
 
-  await page.waitForSelector(selector);
+  const canvas = await page.waitForSelector(selector);
+
 
   const element = await performCanvasCapture(page, selector) // const element = page.$(selector)
+
 
   // const data = await page.screenshot({
   //   type: 'png'
